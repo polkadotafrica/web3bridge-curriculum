@@ -19,6 +19,9 @@ type Props = {
 export default function InkClientProvider({ children }: Props) {
   const [client, setClient] = useState<PolkadotClient | null>(null);
 
+  // Initialize the client
+  // This needs to be done first, before we can initialize our contract
+  // or even call the contrat using the typedApi
   const initializeClient = useCallback(async () => {
     const client = createClient(
       getWsProvider("wss://testnet-passet-hub.polkadot.io")
@@ -28,7 +31,7 @@ export default function InkClientProvider({ children }: Props) {
     return client;
   }, []);
 
-  // Read the token metadata details
+  // Read the token metadata details using the low-level ink! API
   const fetchTokenMetadata = useCallback(
     async (account: WalletAccount) => {
       const cl = client ?? (await initializeClient());
@@ -152,6 +155,7 @@ export default function InkClientProvider({ children }: Props) {
     [client, initializeClient]
   );
 
+  // Read smart contract query message using low-level ink! API
   const fetchTokenAllowance = useCallback(
     async (owner: Binary, spender: Binary, account: WalletAccount) => {
       // Implementation for fetching token allowance
@@ -180,21 +184,27 @@ export default function InkClientProvider({ children }: Props) {
     [client, initializeClient]
   );
 
+  /// Write to a smart contract message using the new SDK INK!
   const transferToken = useCallback(
     async (to: Binary, amount: bigint, account: WalletAccount) => {
+      // Initialize the client again
       const cl = client ?? (await initializeClient());
 
+      // createInkSdk comes from the new ink! SDK
       const inkClient = createInkSdk(cl);
+      // Initialize the contract using the typed Metadata and address
       const pspContract = inkClient.getContract(
         contracts.psp_coin,
         "0xC139114BB0199171a12b39ba4a0A818eF637F840"
       );
 
+      // Get the connected wallet's signer
       const signer = await getPolkadotSigner(account);
       if (signer) {
+        // Next lines perform the actual send transaction
         const result = await pspContract
-          .send("PSP22::transfer", {
-            origin: account.address,
+          .send("PSP22::transfer", {  // Send a transfer message
+            origin: account.address,  // connected wallet as the origin
             data: {
               to,
               value: [amount, 0n, 0n, 0n],
@@ -213,6 +223,8 @@ export default function InkClientProvider({ children }: Props) {
     [client, initializeClient]
   );
 
+  /// This works same as the transfer function above
+  /// It calls transfer from instead and approval must have been granted prior
   const approveAllowance = useCallback(async (
     owner: Binary,
     receiver: Binary,

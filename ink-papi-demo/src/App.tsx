@@ -58,8 +58,9 @@ function App() {
       fetchData();
     }
   }, [selectedAccount, fetchTokenInfo, fetchTokenSupply]);
-console.log({ allowance });
+  
   useEffect(() => {
+    // Fetch the allowance based on the owner and connected wallet
     if (owner && selectedAccount) {
       fetchAllowance(
         owner.startsWith("0x")
