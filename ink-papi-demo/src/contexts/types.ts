@@ -24,6 +24,8 @@ type InkClientContextType = {
   }>;
   fetchTokenSupply: () => Promise<bigint | undefined>;
   deploy: (account: WalletAccount) => Promise<void>;
+  approve: (spender: Binary, receiver: Binary, amount: bigint, account: WalletAccount) => Promise<void>;
+  fetchAllowance: (owner: Binary, spender: Binary, account: WalletAccount) => Promise<bigint | undefined>
   transferToken: (to: Binary, amount: bigint, account: WalletAccount) => Promise<void>;
 };
 

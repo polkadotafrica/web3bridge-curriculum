@@ -5,7 +5,11 @@ import { getWsProvider } from "polkadot-api/ws-provider";
 import { useCallback, useMemo, useState } from "react";
 import { InkClientContext } from "./types";
 import type { WalletAccount } from "@talismn/connect-wallets";
-import { convertSS58toHex, decodeU128, getPolkadotSigner } from "../utils/helpers";
+import {
+  convertSS58toHex,
+  decodeU128,
+  getPolkadotSigner,
+} from "../utils/helpers";
 import { createInkSdk } from "@polkadot-api/sdk-ink";
 
 type Props = {
@@ -148,6 +152,34 @@ export default function InkClientProvider({ children }: Props) {
     [client, initializeClient]
   );
 
+  const fetchTokenAllowance = useCallback(
+    async (owner: Binary, spender: Binary, account: WalletAccount) => {
+      // Implementation for fetching token allowance
+      const cl = client || (await initializeClient());
+
+      const inkClient = createInkSdk(cl);
+      const pspContract = inkClient.getContract(
+        contracts.psp_coin,
+        "0xC139114BB0199171a12b39ba4a0A818eF637F840"
+      );
+      const result = await pspContract.query("PSP22::allowance", {
+        origin: account.address,
+        data: {
+          owner: owner,
+          spender: spender,
+        },
+      });
+      if (result.success) {
+        console.log({ result: result.value.response });
+        return decodeU128(result.value.response as bigint[]);
+      } else {
+        console.log("Failed query", result);
+        return 0n;
+      }
+    },
+    [client, initializeClient]
+  );
+
   const transferToken = useCallback(
     async (to: Binary, amount: bigint, account: WalletAccount) => {
       const cl = client ?? (await initializeClient());
@@ -159,7 +191,7 @@ export default function InkClientProvider({ children }: Props) {
       );
 
       const signer = await getPolkadotSigner(account);
-        if (signer) {
+      if (signer) {
         const result = await pspContract
           .send("PSP22::transfer", {
             origin: account.address,
@@ -171,15 +203,47 @@ export default function InkClientProvider({ children }: Props) {
           })
           .signAndSubmit(signer);
 
-          if (result.ok) {
-            console.log("Transfer successful:", result);
-          } else {
-            console.error("Transfer failed:", result);
-          }
+        if (result.ok) {
+          console.log("Transfer successful:", result);
+        } else {
+          console.error("Transfer failed:", result);
+        }
       }
     },
     [client, initializeClient]
   );
+
+  const approveAllowance = useCallback(async (
+    owner: Binary,
+    receiver: Binary,
+    amount: bigint,
+    account: WalletAccount
+  ) => {
+    const cl = client || (await initializeClient());
+    const inkClient = createInkSdk(cl);
+    const pspContract = inkClient.getContract(
+      contracts.psp_coin,
+      "0xC139114BB0199171a12b39ba4a0A818eF637F840"
+    );
+    const signer = await getPolkadotSigner(account);
+    if (signer) {
+      const result = await pspContract.send("PSP22::transfer_from", {
+        origin: account.address,
+        data: {
+          from: owner,
+          to: receiver,
+          value: [amount, 0n, 0n, 0n],
+          data: Binary.fromText("")
+        },
+      }).signAndSubmit(signer);
+
+      if (result.ok) {
+        console.log("Transfer successful:", result);
+      } else {
+        console.error("Transfer failed:", result);
+      }
+    }
+  }, [client, initializeClient]);
 
   const ctxValue = useMemo(() => {
     return {
@@ -188,13 +252,17 @@ export default function InkClientProvider({ children }: Props) {
       fetchTokenSupply: fetchTokenSupply,
       deploy: deployNewToken,
       transferToken,
+      approve: approveAllowance,
+      fetchAllowance: fetchTokenAllowance,
     };
   }, [
     client,
     fetchTokenMetadata,
     transferToken,
+    fetchTokenAllowance,
     deployNewToken,
     fetchTokenSupply,
+    approveAllowance,
   ]);
 
   return (
